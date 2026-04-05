@@ -136,12 +136,12 @@ public class AiServicesRecorder {
                     if (info.languageModelSupplierClassName() != null
                             || info.streamingChatLanguageModelSupplierClassName() != null) {
                         if (info.languageModelSupplierClassName() != null) {
-                            Supplier<? extends ChatModel> supplier = createSupplier(
+                            Supplier<? extends ChatModel> supplier = createInstance(
                                     info.languageModelSupplierClassName());
                             quarkusAiServices.chatModel(supplier.get());
                         }
                         if (info.streamingChatLanguageModelSupplierClassName() != null) {
-                            Supplier<? extends StreamingChatModel> supplier = createSupplier(
+                            Supplier<? extends StreamingChatModel> supplier = createInstance(
                                     info.streamingChatLanguageModelSupplierClassName());
                             quarkusAiServices.streamingChatModel(supplier.get());
                         }
@@ -242,7 +242,7 @@ public class AiServicesRecorder {
                             quarkusAiServices.chatMemoryProvider(creationalContext.getInjectedReference(
                                     ChatMemoryProvider.class));
                         } else {
-                            Supplier<? extends ChatMemoryProvider> supplier = createSupplier(
+                            Supplier<? extends ChatMemoryProvider> supplier = createInstance(
                                     info.chatMemoryProviderSupplierClassName());
                             quarkusAiServices.chatMemoryProvider(supplier.get());
                         }
@@ -284,7 +284,7 @@ public class AiServicesRecorder {
                                         ModelName.Literal.of(info.moderationModelName())));
                             }
                         } else {
-                            Supplier<? extends ModerationModel> supplier = createSupplier(
+                            Supplier<? extends ModerationModel> supplier = createInstance(
                                     info.moderationModelSupplierClassName());
                             quarkusAiServices.moderationModel(supplier.get());
                         }
@@ -303,7 +303,7 @@ public class AiServicesRecorder {
                             }
 
                         } else {
-                            Supplier<? extends ImageModel> supplier = createSupplier(info.imageModelSupplierClassName());
+                            Supplier<? extends ImageModel> supplier = createInstance(info.imageModelSupplierClassName());
                             quarkusAiServices.imageModel(supplier.get());
                         }
                     }
@@ -315,9 +315,9 @@ public class AiServicesRecorder {
                     }
 
                     if (info.systemMessageProviderClassName() != null) {
-                        quarkusAiServices.systemMessageProvider((SystemMessageProvider) loadClass(
-                                info.systemMessageProviderClassName())
-                                .getConstructor().newInstance());
+                        SystemMessageProvider provider = createInstance(
+                                info.systemMessageProviderClassName());
+                        aiServiceContext.systemMessageProvider = memoryId -> provider.getSystemMessage(memoryId);
                     }
 
                     if (info.maxSequentialToolInvocations() != null && info.maxSequentialToolInvocations() > 0) {
@@ -346,20 +346,18 @@ public class AiServicesRecorder {
                 return Thread.currentThread().getContextClassLoader()
                         .loadClass(info);
             }
+
+            @SuppressWarnings("unchecked")
+            private static <T> T createInstance(String className) throws InstantiationException, IllegalAccessException,
+                    InvocationTargetException, NoSuchMethodException, ClassNotFoundException {
+                Class<?> clazz = loadClass(className);
+                InstanceHandle<?> instance = Arc.container().instance(clazz);
+                if (instance.isAvailable()) {
+                    return (T) instance.get();
+                } else {
+                    return (T) clazz.getConstructor().newInstance();
+                }
+            }
         };
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T> Supplier<T> createSupplier(String className) throws InstantiationException, IllegalAccessException,
-            InvocationTargetException, NoSuchMethodException, ClassNotFoundException {
-        Class<?> clazz = Thread.currentThread().getContextClassLoader().loadClass(className);
-        InstanceHandle<?> instance = Arc.container().instance(clazz);
-        if (instance.isAvailable()) {
-            return (Supplier<T>) instance.get();
-        } else {
-            return (Supplier<T>) clazz
-                    .getConstructor().newInstance();
-        }
-
     }
 }
